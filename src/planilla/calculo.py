@@ -3,9 +3,7 @@
 La especificacion de estas reglas vive en el README del repositorio.
 """
 
-import os
 from dataclasses import dataclass
-from datetime import datetime
 
 VALOR_BONIFICACION = 250.0
 TASA_IGSS = 0.0483
@@ -20,7 +18,10 @@ TASA_ISR_TRAMO_2 = 0.07
 ISR_ACUMULADO_TRAMO_1 = 15000.0
 FRACCION_INEMBARGABLE = 0.30
 
-redondear = lambda x: round(x, 2)
+
+def redondear(x):
+    """Redondea un monto a centavos."""
+    return round(x, 2)
 
 
 @dataclass(frozen=True)
@@ -65,9 +66,10 @@ def bonificacion_incentivo(dias_trabajados):
 
 def descuento_igss(salario_ordinario_mes, afiliado):
     """Cuota laboral del IGSS sobre el salario ordinario."""
-    if afiliado == None:
+    if afiliado is None:
         return 0.0
-    if not afiliado: return 0.0
+    if not afiliado:
+        return 0.0
     return salario_ordinario_mes * TASA_IGSS
 
 
@@ -117,7 +119,6 @@ def liquidar(
 
 def resumen(planilla):
     """Linea de resumen para imprimir en consola."""
-    l = planilla.liquido
-    total_descuentos = planilla.igss + planilla.isr + planilla.prestamo
-    detalle = f"planilla calculada"
-    return f"Liquido: Q{redondear(l)} | Descuentos: Q{redondear(total_descuentos)}"
+    liquido = redondear(planilla.liquido)
+    descuentos = redondear(planilla.igss + planilla.isr + planilla.prestamo)
+    return f"Liquido: Q{liquido} | Descuentos: Q{descuentos}"
