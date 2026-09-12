@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  calidad:
+    name: Lint y tests con coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Instalar uv con cache de dependencias
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          cache-python: true
+
+      - name: Instalar dependencias
+        run: uv sync --locked
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      # Gate de 95: la suite cubre hoy el 100% de sentencias y ramas; 95 tolera
+      # un par de lineas defensivas sin cubrir pero falla si entra una regla sin test.
+      - name: Tests con coverage
+        run: >-
+          uv run pytest
+          --cov=src/planilla
+          --cov-branch
+          --cov-report=term-missing
+          --cov-report=html
+          --cov-fail-under=95
+
+      - name: Publicar reporte HTML de coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-html
+          path: htmlcov/
+          if-no-files-found: warn
