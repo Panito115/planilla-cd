@@ -49,7 +49,7 @@ particiones de sus propias entradas (sección 2.4).
 | EP-08 | `dias_trabajados` | Mes completo, `30` | Válida | `30` | Bonificación Q250.00 |
 | EP-09 | `dias_trabajados` | `> 30` | Inválida | `40` | `ValueError` |
 | EP-10 | `afiliado_igss` | Afiliado | Válida | `True`, ordinario Q5100 | IGSS Q246.33 (5100 × 4.83%) |
-| EP-11 | `afiliado_igss` | No afiliado | Válida | `False`, ordinario Q5100 | IGSS Q0.00 |
+| EP-11 | `afiliado_igss` | No afiliado | Válida | `False` y `None` (sin dato), ordinario Q5100 | IGSS Q0.00 |
 | EP-12 | Renta imponible | `<= 0` (base `<= 4000`) | Válida | base `3000` | ISR mensual Q0.00 |
 | EP-13 | Renta imponible | `0 < x <= 300000` (base `4000 < b <= 29000`) | Válida | base `4800` | ISR mensual Q40.00 (9600 × 5% / 12) |
 | EP-14 | Renta imponible | `> 300000` (base `> 29000`) | Válida | base `35000` | ISR mensual Q1670.00 ((15000 + 72000 × 7%) / 12) |
@@ -131,7 +131,8 @@ Lo que confirma la tabla, además de cada monto:
 | CLI-02 | Ejemplo del README | `salario_base=4000 horas_extra=8 dias_trabajados=30 cuota_prestamo=500` | Imprime `Liquido: Q3747.14 \| Descuentos: Q702.86`; retorna `0` |
 | CLI-03 | Solo salario, con los valores por defecto | `salario_base=4800` | Afiliado, 30 días, sin horas ni préstamo: `Liquido: Q4778.16 \| Descuentos: Q271.84` |
 | CLI-04 | No afiliado | `salario_base=4800 afiliado_igss=no` | No descuenta IGSS: `Liquido: Q5010.0 \| Descuentos: Q40.0` |
-| CLI-05 | `parse_args()` | `["salario_base=4800", "afiliado_igss=no", "suelto"]` | `{"salario_base": 4800.0, "afiliado_igss": "no"}`: el número pasa a `float`, el texto se queda como texto y lo que no trae `=` se ignora |
+| CLI-05 | `parse_args()` | `["salario_base=4800", "suelto", "afiliado_igss=no"]` | `{"salario_base": 4800.0, "afiliado_igss": "no"}`: el número pasa a `float`, el texto se queda como texto y lo que no trae `=` se ignora sin cortar la lectura de lo que sigue |
+| CLI-06 | Ejecución como módulo (`python -m planilla.cli`) | Sin argumentos y con `salario_base=4800` | El proceso termina con código `1` y `0`: `sys.exit(main())` propaga lo que retorna `main()` |
 
 Cálculo de CLI-02 a mano: valor hora 4000 / 240 × 1.5 × 8 = Q200 de horas extra; ordinario
 Q4200; IGSS Q202.86; ISR Q0 (renta imponible 0); bonificación Q250; líquido antes Q4247.14;
@@ -164,10 +165,34 @@ lo que dice el README ("el código funciona y cumple las reglas").
 | `tests/test_particiones.py` | EP-01 a EP-18 | Todas las reglas de `calculo.py` | Aceptar entradas fuera de rango; tasa, recargo o tramo equivocados; incluir la bonificación en el IGSS; no recortar el préstamo |
 | `tests/test_fronteras.py` | BV-01 a BV-10 | `valor_hora()`, `pago_horas_extra()`, `bonificacion_incentivo()`, `descuento_isr()`, `descuento_prestamo()` | Comparaciones corridas por uno (`<` contra `<=`) en horas, días, tramos del ISR, cuota y piso |
 | `tests/test_tabla_decision.py` | R1 a R12 | `liquidar()` | Descontar en otro orden, aplicar IGSS sin afiliación, calcular el piso sobre otra base |
-| `tests/test_cli.py` | CLI-01 a CLI-05 | `parse_args()`, `main()`, `resumen()` | Código de salida incorrecto, argumentos mal interpretados, desglose mal sumado |
+| `tests/test_cli.py` | CLI-01 a CLI-06 | `parse_args()`, `main()`, `resumen()` | Código de salida incorrecto, argumentos mal interpretados, desglose mal sumado |
 
-## 5. Coverage
+## 5. Coverage y efectividad de la suite
 
-El gate cuenta todo `src/planilla`, incluida la CLI. Por eso `tests/test_cli.py` es necesario:
-probando solo `calculo.py` el porcentaje no llega al umbral. El valor de `--cov-fail-under` y su
-justificación se fijan en la fase 3, después de medir la cobertura real de esta suite.
+Comando (el mismo que corre el pipeline):
+
+```bash
+uv run pytest --cov=src/planilla --cov-branch --cov-report=term-missing --cov-report=html --cov-fail-under=95
+```
+
+| Suite | Sentencias | Ramas | Coverage total | Gate de 95 |
+|---|---:|---:|---:|---|
+| Solo reglas de negocio (sin `test_cli.py`) | 73 / 101 | 20 / 28 | 72% | Falla (tampoco llega a 80) |
+| Suite completa (68 tests) | 101 / 101 | 28 / 28 | 100% | Pasa |
+
+**Umbral: `--cov-fail-under=95` con coverage de ramas.** Justificación: la suite cubre hoy el
+100% de sentencias y ramas, y 95 tolera un par de líneas defensivas sin cubrir, pero falla en
+cuanto entra una regla nueva sin su test.
+
+El gate cuenta todo `src/planilla`, incluida la CLI. Sin `tests/test_cli.py` el total baja a
+72%, porque `cli.py` queda en 0% y `resumen()` sin ejecutar.
+
+Coverage alto no garantiza que los tests detecten errores. Por eso se hizo además una prueba de
+mutantes manual: se inyectaron 24 defectos, uno por uno, en una copia del código. Entre ellos:
+cambiar la tasa del IGSS, usar `>=` en lugar de `>` en los límites de horas y días, meter la
+bonificación en la base del IGSS, calcular el ISR sobre el ordinario, quitar el tope del
+préstamo, invertir `afiliado_igss` en la CLI y no propagar el código de salida.
+
+La primera corrida detectó 23. El que sobrevivió fue cambiar `continue` por `break` en
+`parse_args()`, porque en CLI-05 el argumento sin `=` iba de último. Se movió al medio y la suite
+quedó en **24/24 detectados**.
