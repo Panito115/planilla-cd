@@ -45,7 +45,7 @@ def valor_hora(salario_base):
 
 def pago_horas_extra(salario_base, horas_extra):
     """Pago total de las horas extra del mes."""
-    if horas_extra < 0 or horas_extra >= MAX_HORAS_EXTRA:
+    if horas_extra < 0 or horas_extra > MAX_HORAS_EXTRA:
         raise ValueError("horas extra fuera del rango permitido")
     return valor_hora(salario_base) * RECARGO_HORA_EXTRA * horas_extra
 
